@@ -1,7 +1,8 @@
+from __future__ import absolute_import
 from miranda import upnp, msearch
 
 conn = upnp()
-msearch(0, 0, conn, 2)
+msearch(0, 0, conn)
 
 SWITCHES = []
 

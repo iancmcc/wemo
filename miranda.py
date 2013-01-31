@@ -151,6 +151,8 @@ class upnp:
 
 	#Send network data
 	def send(self,data,socket):
+		print "Sending", data
+		print "To", self.ip, self.port
 		#By default, use the client socket that's part of this class
 		if socket == False:
 			socket = self.csock
@@ -176,6 +178,7 @@ class upnp:
 		try:
 			newsock = socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP)
 			newsock.setsockopt(SOL_SOCKET,SO_REUSEADDR,1)
+			print "Binding to", ip, port
 			newsock.bind((ip,port))
 			return newsock
 		except:
@@ -831,7 +834,7 @@ def msearch(argc, argv, hp, cycles=99999999):
 		print 'Failed to bind port %d' % lport
 		return
 
-	hp.send(request,server)
+	#hp.send(request,server)
 	while True:
 		try:
 			hp.parseSSDPInfo(hp.listen(1024,server),False,False)
