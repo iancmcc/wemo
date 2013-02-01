@@ -5,7 +5,6 @@ monkey.patch_socket()
 import requests
 
 from wemo.xsd import device as deviceParser, service as serviceParser
-from wemo.xsd import envelope as envelopeParser
 
 
 REQUEST_TEMPLATE = """

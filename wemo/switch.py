@@ -5,7 +5,7 @@ from wemo.device import WemoDevice
 class WemoSwitch(WemoDevice):
 
     def get_state(self):
-        return self.get_service('basicevent').GetBinaryState()
+        return int(self.get_service('basicevent').GetBinaryState()['BinaryState'])
 
     def set_state(self, state):
         self.get_service('basicevent').SetBinaryState(BinaryState=int(state))
@@ -15,4 +15,7 @@ class WemoSwitch(WemoDevice):
 
     def on(self):
         return self.set_state(1)
+
+    def __str__(self):
+        return '<WeMo Switch "{name}">'.format(name=self.name)
 
