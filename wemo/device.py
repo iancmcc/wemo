@@ -1,11 +1,14 @@
-import xml.etree.cElementTree as et
+from xml.etree import cElementTree as et
+from gevent import monkey
 
-import gevent
-from gevent import monkey; monkey.patch_socket()
+monkey.patch_socket()
 import requests
 
+from wemo.xsd import device as deviceParser, service as serviceParser
+from wemo.xsd import envelope as envelopeParser
 
-REQUEST_TEMPLATE =  """
+
+REQUEST_TEMPLATE = """
 <?xml version="1.0" encoding="utf-8"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
  <s:Body>
@@ -16,46 +19,80 @@ REQUEST_TEMPLATE =  """
 </s:Envelope>
 """
 
+class WemoService(object):
+    def __init__(self, service, base_url):
+        self._base_url = base_url.rstrip('/')
+        self._config = service
+        url = '%s/%s' % (base_url, service.get_SCPDURL().strip('/'))
+        xml = requests.get(url)
+        self._svc_config = serviceParser.parseString(xml.content).actionList
+        self.actions = {a.get_name(): a for a in self._svc_config.get_action()}
+
+    @property
+    def hostname(self):
+        return self._base_url.split('/')[-1]
+
+    @property
+    def controlURL(self):
+        return '%s/%s' % (self._base_url, self._config.get_controlURL().strip('/'))
+
+    @property
+    def serviceType(self):
+        return self._config.get_serviceType()
+
+    def __getattr__(self, attr):
+        if attr not in self.actions:
+            raise AttributeError(attr)
+
+        def _act(**kwargs):
+            arglist = '\n'.join('<{0}>{1}</{0}>'.format(arg, value) for arg, value in kwargs.iteritems())
+            body = REQUEST_TEMPLATE.format(
+                action=attr,
+                service=self.serviceType,
+                args=arglist
+            )
+            headers = {
+                'Content-Type': 'text/xml',
+                'SOAPACTION': '"%s#%s"' % (self.serviceType, attr)
+            }
+            response = requests.post(self.controlURL, body.strip(), headers=headers)
+            d = {}
+            for r in et.fromstring(response.content).getchildren()[0].getchildren()[0].getchildren():
+                d[r.tag] = r.text
+            return d
+
+        _act.__name__ = attr
+        return _act
+
 
 class WemoDevice(object):
-    """
-    Base class for a WeMo device (switch or motion)
-    """
-    _NS = '{urn:Belkin:device-1-0}'
-
     def __init__(self, url):
-        self._url_root = url.rsplit('/', 1)[0]
-        et.register_namespace(self._NS, '')
-
+        base_url = url.rsplit('/', 1)[0]
         xml = requests.get(url)
-        self._doc = et.fromstring(xml.content)
-        self.name = self._text('/device/friendlyName')
-        self.description = self._text('/device/modelDescription')
-
+        self._config = deviceParser.parseString(xml.content).device
+        sl = self._config.serviceList
         self.services = {}
-        for service in self._find('/device/serviceList/service'):
-            d = {}
-            for attr in ('serviceType', 'serviceId', 'controlURL', 'eventSubURL', 'SCPDURL'):
-                d[attr] = self._text('/' + attr, service)
-            gevent.spawn(self._get_service, d)
+        for svc in sl.service:
+            svcname = svc.get_serviceType().split(':')[-2]
+            self.services[svcname] = WemoService(svc, base_url)
 
-    def _text(self, xpath, root=None):
-        return self._find(xpath, root)[0].text
+    def get_service(self, name):
+        return self.services.get(name, None)
 
-    def _find(self, xpath, root=None):
-        newpath = '/{ns}'.format(ns=self._NS).join(xpath.split('/'))
-        return (root or self._doc).findall('.' + newpath)
+    @property
+    def model(self):
+        return self._config.get_modelDescription()
 
-    def _get_service(self, service_dict):
-        svcurl = '%s/%s' % (self._url_root, service_dict['SCPDURL'])
-        xml = requests.get(svcurl)
-        doc = et.fromstring(xml.content)
-        for action in doc.findall('.//{urn:Belkin:service-1-0}action'):
-            a = {}
-            a['name'] = action.find('./name').text
-        self.services[service_dict['serviceType']] = service_dict
+    @property
+    def name(self):
+        return self._config.get_friendlyName()
+
+    @property
+    def serialnumber(self):
+        return self._config.get_serialNumber()
 
 
 if __name__ == "__main__":
     device = WemoDevice("http://10.42.1.102:49152/setup.xml")
-    gevent.sleep(10)
+    print device.get_service('basicevent').SetBinaryState(BinaryState=0)
+

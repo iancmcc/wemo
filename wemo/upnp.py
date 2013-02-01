@@ -6,7 +6,6 @@ from gevent.server import DatagramServer
 
 
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 
 class WemoUPnP(object):
@@ -57,6 +56,7 @@ class WemoUPnP(object):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     def handler(address, headers):
         print "I GOT ONE"
         print address, headers
